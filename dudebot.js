@@ -1,9 +1,12 @@
 /*
- TODO
-  - parse the wiki page
-  - decent code
-  - multiple tools
-  - multiple environments
+TODO
+- parse the wiki page
+- separate intents into ask_for_tool and ask_for_both (to prevent stupid empty checks)
+- multiple tools
+- multiple environments
+- stop loops after x wwrong messages, point to wiki
+- many possible replies instead of one
+- decent code
 */
 
 
@@ -27,12 +30,9 @@ var controller = Botkit.slackbot({ debug: false });
 var slackbot = controller.spawn({ token: slackToken }).startRTM();
 var witbot = Witbot(witToken);
 
-var confidence = 0.6;
-
 controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], function(bot, message) {
-    //bot.reply(message, 'It looks like you\'re trying to find a tool. :)'); // TODO add clippy emoji
-
     var user = message.user
+    var confidence = calc_confidence(message.event) ;
 
     witbot
     .process(message.text)
@@ -45,15 +45,21 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], functi
         var environment;
 
         var askForTool = function(convo, ask_for_environment) {
-            console.log('Asking for tool');
             convo.ask(msg(user, 'which tool?'), function(response, convo) {
                 witbot
                 .process(response.text)
-                .hears('reply', confidence, function(outcome) {
+                .hears('reply_tool', confidence, function(outcome) {
                     tool = outcome.entities.tool[0].value ;
-                    if (ask_for_environment) {
+
+                    if (empty(environments)) {
                         askForEnvironment(convo);
                     }
+
+                    convo.next();
+                })
+                .hears('reply_both', confidence, function(outcome) {
+                    tool = outcome.entities.tool[0].value ;
+                    environment = outcome.entities.environment[0].value;
                     convo.next();
                 })
                 .otherwise(function(outcome) {
@@ -69,11 +75,12 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], functi
             convo.ask(msg(user, 'on which environment?'), function (response, convo) {
                 witbot
                 .process(response.text)
-                .hears('reply', confidence, function(outcome) {
+                .hears('reply_environment', confidence, function(outcome) {
                     environment = outcome.entities.environment[0].value;
                     convo.next();
                 })
                 .otherwise(function(outcome) {
+                    console.log('Confidence too low (' + outcome.confidence + ') for: ' + outcome._text);
                     bot.reply(message, msg(user, 'uh? I don\'t know that one'));
                     convo.repeat();
                     convo.next();
@@ -83,8 +90,12 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], functi
 
         endConversation = function(convo) {
             if (convo.status == 'completed') {
-                console.log('tool: ' + tool);
-                console.log('environment: ' + environment);
+                if (empty(tool)) {
+                    tool = tools[0].value;
+                }
+                if (empty(environment)) {
+                    environment = environments[0].value;
+                }
 
                 var url = 'http://www.google.com';
                 bot.reply(message, msg(user, tool + ' on ' + environment + ': ' + url));
@@ -95,7 +106,7 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], functi
         };
 
 
-        if (empty(tools) || empty(environments)) {
+        if (empty(tools)) {
             slackbot.startConversation(message, function(err, convo) {
                 askForTool(convo, empty(environments));
                 convo.on('end', endConversation);
@@ -108,14 +119,23 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], functi
         } else {
             var tool = tools[0].value;
             var environment = environments[0].value;
+
             var url = 'http://www.google.com';
             bot.reply(message, tool + ' on ' + environment + ': ' + url);
         }
+    })
+    .otherwise(function(outcome) {
+        console.log('Confidence too low (' + outcome.confidence + ') for: ' + outcome._text);
     });
 });
 
 function msg(user, text) {
     return '<@' + user + '>: ' + text ;
+}
+
+function calc_confidence(event) {
+    if (event === 'ambient') return 0.8;
+    else return 0.6;
 }
 
 function empty(obj) {
