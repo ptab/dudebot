@@ -1,0 +1,16 @@
+{
+  "name": "dudebot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dudebot.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "botkit": "^0.1.1",
+    "botkit-middleware-witai": "0.0.2",
+    "witbot": "^2.1.0"
+  }
+}
