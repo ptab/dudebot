@@ -20,7 +20,7 @@
     },
 
     "confluence" : {
-        "url" : "https ://taborda.atlassian.net/wiki/pages/viewpage.action?pageId=1212423",
+        "url" : "https://taborda.atlassian.net/wiki/pages/viewpage.action?pageId=1212423",
         "content_id" : 1212423,
         "api" : {
             "host" : "taborda.atlassian.net",

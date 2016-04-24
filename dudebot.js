@@ -1,8 +1,6 @@
 /*
 TODO
-- storage to handle multiple conversations at the same time
 - get src instead of display URL
-- divide again into ask for_both and ask_for_tool to avoid stupid enpty checks
 - multiple tools
 - multiple environments
 - stop loops after x wwrong messages, point to wiki
@@ -21,19 +19,18 @@ var slackbot = controller.spawn({ token: getToken('slack') }).startRTM((err, bot
 
 var witbot = require('../witbot')(getToken('wit'))
 
-controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, message) => {
-    var confidenceToAsk = initialConfidence(message.event) ;
-    var confidenceToReply = config.confidence.reply ;
+var data = {};
 
-    var tool;
-    var environment;
+controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, message) => {
+    var confidenceToAsk = initialConfidence(message.event);
+    var confidenceToReply = config.confidence.reply;
 
     var askForEnvironment = function(convo) {
-        convo.ask(msg(message.user, 'on which environment?'), (response, convo) => {
+        convo.ask(toUser(message, 'on which environment?'), (response, convo) => {
             witbot
             .process(response.text, { state: 'question_asked' })
             .hears('reply_with_environment', config.confidence.reply, (outcome) => {
-                environment = outcome.entities.environment[0].value;
+                store(message, 'environment', outcome.entities.environment[0].value);
                 convo.next();
             })
             .otherwise((outcome) => {
@@ -48,34 +45,34 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
     witbot
     .process(message.text)
     .hears('ask_with_both', confidenceToAsk, (outcome) => {
-        tool = outcome.entities.tool[0].value;
-        environment = outcome.entities.environment[0].value;
-        reply(message, tool, environment);
+        store(message, 'tool', outcome.entities.tool[0].value);
+        store(message, 'environment', outcome.entities.environment[0].value);
+        reply(message);
     })
     .hears('ask_with_tool', confidenceToAsk, (outcome) => {
-        tool = outcome.entities.tool[0].value;
+        store(message, 'tool', outcome.entities.tool[0].value);
 
         slackbot.startConversation(message, (_, convo) => {
             askForEnvironment(convo);
             convo.on('end', (convo) => {
                 if (convo.status == 'completed') {
-                    reply(message, tool, environment);
+                    reply(message);
                 }
             });
         });
     })
     .hears('ask_with_none', confidenceToAsk, (outcome) => {
         slackbot.startConversation(message, (_, convo) => {
-            convo.ask(msg(message.user, 'which tool?'), (response, convo) => {
+            convo.ask(toUser(message, 'which tool?'), (response, convo) => {
                 witbot
                 .process(response.text, { state: 'question_asked' })
                 .hears('reply_with_both', confidenceToReply, (outcome) => {
-                    tool = outcome.entities.tool[0].value ;
-                    environment = outcome.entities.environment[0].value;
+                    store(message, 'tool', outcome.entities.tool[0].value);
+                    store(message, 'environment', outcome.entities.environment[0].value);
                     convo.next();
                 })
                 .hears('reply_with_tool', confidenceToReply, (outcome) => {
-                    tool = outcome.entities.tool[0].value ;
+                    store(message, 'tool', outcome.entities.tool[0].value);
                     askForEnvironment(convo);
                     convo.next();
                 })
@@ -89,7 +86,7 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
 
             convo.on('end', (convo) => {
                 if (convo.status == 'completed') {
-                    reply(message, tool, environment);
+                    reply(message);
                 }
             });
         });
@@ -98,7 +95,7 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
 
 
 
-function reply(message, tool, environment) {
+function reply(message) {
     var options = {
         method: 'GET',
         host: config.confluence.api.host,
@@ -110,18 +107,28 @@ function reply(message, tool, environment) {
     https.get(options, (res) => {
         res.setEncoding('utf8');
         res.on('data', (d) => {
+            var tool = get(message, 'tool');
+            var environment = get(message, 'environment');
+
             var table = tabletojson.convert(JSON.parse(d).body.view.value)[0];
+
+            var url;
             for (var i in table) {
                 var entry = table[i];
                 if (entry.Tool.toUpperCase() === tool.toUpperCase()) {
-                    var url = entry[config.headers[environment]];
-                    slackbot.reply(message, msg(message.user, 'there you go: ' + url));
-                    return ;
+                    url = entry[config.headers[environment]];
+                    break;
                 }
             }
 
-            slackbot.reply(message, msg(message.user, '¯\\_(ツ)_/¯'));
-            slackbot.reply(message, 'Try to find it here: ' + config.confluence.url);
+            if (url) {
+                slackbot.reply(message, toUser(message, 'there you go: ' + url));
+            } else {
+                slackbot.reply(message, toUser(message, '¯\\_(ツ)_/¯'));
+                slackbot.reply(message, 'Try to find it here: ' + config.confluence.url);
+            }
+
+            clear(message);
         });
     })
     .on('error', (e) => {
@@ -132,8 +139,22 @@ function reply(message, tool, environment) {
 
 // helper functions
 
-function msg(user, text) {
-    return '<@' + user + '>: ' + text ;
+function toUser(message, text) {
+    return '<@' + message.user + '>: ' + text;
+}
+
+function store(message, key, value) {
+    if (!data[message.user]) data[message.user] = {};
+    data[message.user][key] = value;
+}
+
+function get(message, key) {
+    if (data[message.user]) return data[message.user][key];
+    else return undefined;
+}
+
+function clear(message) {
+    if (data[message.user]) delete data[message.user];
 }
 
 function initialConfidence(event) {
@@ -142,7 +163,7 @@ function initialConfidence(event) {
 }
 
 function getToken(name) {
-    var token = config.tokens[name] ;
+    var token = config.tokens[name];
     if (token) return token;
     else throw new Error('Token for ' +  name + ' is not defined');
 }
