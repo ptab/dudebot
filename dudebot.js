@@ -1,7 +1,6 @@
 /*
 TODO
-- export properties to other file
-- get src instead of display
+- get src instead of display URL
 - divide again into ask for_both and ask_for_tool to avoid stupid enpty checks
 - multiple tools
 - multiple environments
@@ -10,36 +9,16 @@ TODO
 - decent code
 */
 
-var slackToken = assertTokenSet('slackToken');
-var witToken = assertTokenSet('witToken');
-
-var confidenceToStart = 0.8 ;
-var confidenceToReply = 0.6;
-
-var headers = {
-    int: 'Integration',
-    integration: 'Integration',
-    demo: 'Demo',
-    lp: 'L&P',
-    'l&p': 'L&P',
-    prod: 'Production (Amsterdam)',
-    production: 'Production (Amsterdam)'
-};
-
-var dudePage = 'https://taborda.atlassian.net/wiki/pages/viewpage.action?pageId=1212423';
-
-
-var controller = require('botkit').slackbot({ debug: false });
-var slackbot = controller.spawn({ token: slackToken }).startRTM();
-var witbot = require('witbot')(witToken);
+var config = require('./config.json');
 
 var https = require('https');
 var tabletojson = require('tabletojson');
 
+var controller = require('botkit').slackbot({ debug: false });
+var slackbot = controller.spawn({ token: getToken('slack') }).startRTM();
+var witbot = require('witbot')(getToken('wit'));
 
 controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, message) => {
-    var user = message.user
-
     witbot
     .process(message.text)
     .hears('ask_for_tool', initialConfidence(message.event), (outcome) => {
@@ -51,23 +30,23 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
         var environment;
 
         var askForTool = function(convo, ask_for_environment) {
-            convo.ask(msg(user, 'which tool?'), (response, convo) => {
+            convo.ask(msg(message.user, 'which tool?'), (response, convo) => {
                 witbot
                 .process(response.text)
-                .hears('reply_tool', confidenceToReply, (outcome) => {
+                .hears('reply_tool', config.confidence.reply, (outcome) => {
                     log(outcome);
                     tool = outcome.entities.tool[0].value ;
                     if (empty(environments)) askForEnvironment(convo);
                     convo.next();
                 })
-                .hears('reply_both', confidenceToReply, (outcome) => {
+                .hears('reply_both', config.confidence.reply, (outcome) => {
                     log(outcome);
                     tool = outcome.entities.tool[0].value ;
                     environment = outcome.entities.environment[0].value;
                     convo.next();
                 })
                 .otherwise((outcome) => {
-                    console.log('Confidence', outcome.confidence, 'too low for:', outcome._text);
+                    logTooLow(outcome);
                     bot.reply(message, 'uh? I don\'t know that one');
                     convo.repeat();
                     convo.next();
@@ -76,15 +55,15 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
         } ;
 
         var askForEnvironment = function(convo) {
-            convo.ask(msg(user, 'on which environment?'), (response, convo) => {
+            convo.ask(msg(message.user, 'on which environment?'), (response, convo) => {
                 witbot
                 .process(response.text)
-                .hears('reply_environment', confidenceToReply, (outcome) => {
+                .hears('reply_environment', config.confidence.reply, (outcome) => {
                     environment = outcome.entities.environment[0].value;
                     convo.next();
                 })
                 .otherwise((outcome) => {
-                    console.log('Confidence', outcome.confidence, 'too low for:', outcome._text);
+                    logTooLow(outcome);
                     bot.reply(message, 'uh? I don\'t know that one');
                     convo.repeat();
                     convo.next();
@@ -92,14 +71,13 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
             });
         } ;
 
-        endConversation = function(convo) {
+        var endConversation = function(convo) {
             if (convo.status == 'completed') {
                 if (empty(tool)) tool = tools[0].value;
                 if (empty(environment)) environment = environments[0].value;
                 reply(message, tool, environment);
             }
         };
-
 
         if (empty(tools)) {
             slackbot.startConversation(message, (_, convo) => {
@@ -116,30 +94,63 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
             var environment = environments[0].value;
             reply(message, tool, environment) ;
         }
-    })
-    .otherwise((outcome) => {
-        console.log('Confidence', outcome.confidence, 'too low for:', outcome._text);
     });
 });
+
+
+function reply(message, tool, environment) {
+    var options = {
+        method: 'GET',
+        host: config.confluence.api.host,
+        port: config.confluence.api.port,
+        path: '/wiki/rest/api/content/' + config.confluence.content_id + '?expand=body.view',
+        auth: config.confluence.api.username + ':' + config.confluence.api.password
+    };
+
+    https.get(options, (res) => {
+        res.setEncoding('utf8');
+        res.on('data', (d) => {
+            var table = tabletojson.convert(JSON.parse(d).body.view.value)[0];
+            for (var i in table) {
+                var entry = table[i];
+                if (entry.Tool.toUpperCase() === tool.toUpperCase()) {
+                    var url = entry[config.headers[environment]];
+                    slackbot.reply(message, msg(message.user, 'there you go: ' + url));
+                    return ;
+                }
+            }
+
+            slackbot.reply(message, msg(message.user, '¯\\_(ツ)_/¯'));
+            slackbot.reply(message, 'Try to find it here: ' + config.confluence.url);
+        });
+    })
+    .on('error', (e) => {
+        console.error(e);
+    });
+}
+
+
+// helper functions
 
 function msg(user, text) {
     return '<@' + user + '>: ' + text ;
 }
 
 function initialConfidence(event) {
-    if (event === 'ambient') return confidenceToStart;
-    else return confidenceToReply;
+    if (event === 'ambient') return config.confidence.start;
+    else return config.confidence.reply;
 }
 
 function empty(obj) {
     return !obj || obj.length === 0;
 }
 
-function assertTokenSet(token) {
+function getToken(name) {
+    var token = config.tokens[name] ;
     if (token) {
-        return process.env[token];
+        return token;
     } else {
-        console.error('Error: Specify', token, 'in environment');
+        console.error('Error: token for', name, 'is not defined');
         process.exit(1);
     }
 }
@@ -148,39 +159,6 @@ function log(outcome) {
     console.log('Heard', outcome.intent, 'with', outcome.confidence, 'confidence for:', outcome._text);
 }
 
-function reply(message, tool, environment) {
-    var options = {
-        method: 'GET',
-        host: 'taborda.atlassian.net',
-        port: 443,
-        path: '/wiki/rest/api/content/1212423?expand=body.view',
-        auth: 'username:password'
-    };
-
-    https.get(options, (res) => {
-        res.setEncoding('utf8');
-        res.on('data', (d) => {
-            var table = tabletojson.convert(JSON.parse(d).body.view.value)[0];
-            console.log(table)
-
-            var url ;
-            for (var i in table) {
-                var entry = table[i];
-                if (entry.Tool.toUpperCase() === tool.toUpperCase()) {
-                    url = entry[headers[environment]];
-                    break;
-                }
-            }
-
-            if (url) {
-                slackbot.reply(message, msg(message.user, 'there you go: ' + url));
-            } else {
-                slackbot.reply(message, msg(message.user, '¯\\_(ツ)_/¯'));
-                slackbot.reply(message, 'Try to find it here: ' + dudePage);
-            }
-        });
-    })
-    .on('error', (e) => {
-        console.error(e);
-    });
+function logTooLow(outcome) {
+    console.log('Confidence', outcome.confidence, 'too low for:', outcome._text);
 }
