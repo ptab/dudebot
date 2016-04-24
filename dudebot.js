@@ -1,5 +1,6 @@
 /*
 TODO
+- storage to handle multiple conversations at the same time
 - get src instead of display URL
 - divide again into ask for_both and ask_for_tool to avoid stupid enpty checks
 - multiple tools
@@ -9,16 +10,16 @@ TODO
 - decent code
 */
 
-var config = require('./config.json');
-
-var https = require('https');
-var tabletojson = require('tabletojson');
+const config = require('./config.json');
+const https = require('https');
+const tabletojson = require('tabletojson');
 
 var controller = require('botkit').slackbot({ debug: false });
 var slackbot = controller.spawn({ token: getToken('slack') }).startRTM((err, bot, payload) =>  {
     if (err) throw new Error('Error connecting to Slack: ', err)
 });
-var witbot = require('witbot')(getToken('wit'));
+
+var witbot = require('../witbot')(getToken('wit'))
 
 controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, message) => {
     var confidenceToAsk = initialConfidence(message.event) ;
@@ -30,7 +31,7 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
     var askForEnvironment = function(convo) {
         convo.ask(msg(message.user, 'on which environment?'), (response, convo) => {
             witbot
-            .process(response.text)
+            .process(response.text, { state: 'question_asked' })
             .hears('reply_with_environment', config.confidence.reply, (outcome) => {
                 environment = outcome.entities.environment[0].value;
                 convo.next();
@@ -43,7 +44,6 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
             });
         });
     };
-
 
     witbot
     .process(message.text)
@@ -68,15 +68,13 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
         slackbot.startConversation(message, (_, convo) => {
             convo.ask(msg(message.user, 'which tool?'), (response, convo) => {
                 witbot
-                .process(response.text)
+                .process(response.text, { state: 'question_asked' })
                 .hears('reply_with_both', confidenceToReply, (outcome) => {
-                    log(outcome);
                     tool = outcome.entities.tool[0].value ;
                     environment = outcome.entities.environment[0].value;
                     convo.next();
                 })
                 .hears('reply_with_tool', confidenceToReply, (outcome) => {
-                    log(outcome);
                     tool = outcome.entities.tool[0].value ;
                     askForEnvironment(convo);
                     convo.next();
@@ -95,9 +93,6 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
                 }
             });
         });
-    })
-    .otherwise((outcome) => {
-        logTooLow(outcome);
     });
 });
 

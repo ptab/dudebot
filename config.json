@@ -5,8 +5,8 @@
     },
 
     "confidence" : {
-        "start" : 0.8,
-        "reply" : 0.6
+        "start" : 0.9,
+        "reply" : 0.7
     },
 
     "headers" : {
