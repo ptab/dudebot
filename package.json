@@ -1,16 +1,20 @@
 {
   "name": "dudebot",
   "version": "1.0.0",
-  "description": "",
+  "description": "A Slack bot that finds tool (not cars)",
   "main": "dudebot.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "pedro@taborda.me",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ptab/dudebot.git"
+  },
   "dependencies": {
     "botkit": "^0.1.1",
-    "botkit-middleware-witai": "0.0.2",
+    "tabletojson": "^0.4.0",
     "witbot": "^2.1.0"
   }
 }
