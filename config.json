@@ -1,32 +1,37 @@
 {
-    "tokens" : {
-        "slack" : "slack-token",
-        "wit" : "wit-token"
+    "tokens": {
+        "slack": "slack-token",
+        "wit": "wit-token"
     },
 
-    "confidence" : {
-        "start" : 0.9,
-        "reply" : 0.7
-    },
-
-    "headers" : {
-        "int" : "Integration",
-        "integration" : "Integration",
-        "demo" : "Demo",
-        "lp" : "L&P",
-        "l&p" : "L&P",
-        "prod" : "Production (Amsterdam)",
-        "production" : "Production (Amsterdam)"
-    },
-
-    "confluence" : {
-        "url" : "https://taborda.atlassian.net/wiki/pages/viewpage.action?pageId=1212423",
-        "content_id" : 1212423,
-        "api" : {
-            "host" : "taborda.atlassian.net",
-            "port" : 443,
-            "username" : "username",
-            "password" : "password"
+    "confluence": {
+        "url": "https://taborda.atlassian.net/wiki/pages/viewpage.action?pageId=1212423",
+        "content_id": 1212423,
+        "api": {
+            "host": "taborda.atlassian.net",
+            "port": 443,
+            "username": "username",
+            "password": "password"
         }
+    },
+
+    "headers": {
+        "int": "Integration",
+        "integration": "Integration",
+        "demo": "Demo",
+        "lp": "L&P",
+        "l&p": "L&P",
+        "prod": "Production (Amsterdam)",
+        "production": "Production (Amsterdam)"
+    },
+
+    "confidence": {
+        "start": 0.9,
+        "reply": 0.7
+    },
+
+    "wrong_replies": {
+        "tool": 3,
+        "environment": 3
     }
 }

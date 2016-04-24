@@ -3,8 +3,8 @@ TODO
 - get src instead of display URL
 - multiple tools
 - multiple environments
-- stop loops after x wwrong messages, point to wiki
-- many possible replies instead of one
+- amsterdam vs frankfurt
+- different replies instead of hardcoded one
 - decent code
 */
 
@@ -35,9 +35,7 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
             })
             .otherwise((outcome) => {
                 log(outcome);
-                bot.reply(message, 'uh? I don\'t know that one');
-                convo.repeat();
-                convo.next();
+                invalidReply(convo, message, 'environment');
             });
         });
     };
@@ -55,9 +53,8 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
         slackbot.startConversation(message, (_, convo) => {
             askForEnvironment(convo);
             convo.on('end', (convo) => {
-                if (convo.status == 'completed') {
-                    reply(message);
-                }
+                if (convo.status == 'completed') reply(message);
+                clear(message);
             });
         });
     })
@@ -78,24 +75,23 @@ controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, 
                 })
                 .otherwise((outcome) => {
                     log(outcome);
-                    bot.reply(message, 'uh? I don\'t know that one');
-                    convo.repeat();
-                    convo.next();
+                    invalidReply(convo, message, 'tool');
                 });
             });
 
             convo.on('end', (convo) => {
-                if (convo.status == 'completed') {
-                    reply(message);
-                }
+                if (convo.status == 'completed') reply(message);
+                clear(message);
             });
         });
     });
 });
 
 
-
 function reply(message) {
+    var tool = get(message, 'tool');
+    var environment = get(message, 'environment');
+
     var options = {
         method: 'GET',
         host: config.confluence.api.host,
@@ -107,9 +103,6 @@ function reply(message) {
     https.get(options, (res) => {
         res.setEncoding('utf8');
         res.on('data', (d) => {
-            var tool = get(message, 'tool');
-            var environment = get(message, 'environment');
-
             var table = tabletojson.convert(JSON.parse(d).body.view.value)[0];
 
             var url;
@@ -127,13 +120,24 @@ function reply(message) {
                 slackbot.reply(message, toUser(message, '¯\\_(ツ)_/¯'));
                 slackbot.reply(message, 'Try to find it here: ' + config.confluence.url);
             }
-
-            clear(message);
         });
     })
     .on('error', (e) => {
-        console.error(e);
+        bot.reply(message, toUser(message, 'Confluence is mad at me :('));
+        bot.reply(message, 'See if it talks to you: ' + config.confluence.url);
     });
+}
+
+function invalidReply(convo, message, question) {
+    if (inc(message, 'wrong_' + question) >= config.wrong_replies[question]) {
+        slackbot.reply(message, toUser(message, '¯\\_(ツ)_/¯'));
+        slackbot.reply(message, 'Try to find it here: ' + config.confluence.url);
+        convo.stop();
+    } else {
+        slackbot.reply(message, 'uh? I don\'t know that one');
+        convo.repeat();
+        convo.next();
+    }
 }
 
 
@@ -141,6 +145,14 @@ function reply(message) {
 
 function toUser(message, text) {
     return '<@' + message.user + '>: ' + text;
+}
+
+function inc(message, key) {
+    if (!data[message.user]) data[message.user] = {};
+    var c = get(message, key);
+    if (!c) c = 0 ;
+    store(message, key, ++c);
+    return c;
 }
 
 function store(message, key, value) {
