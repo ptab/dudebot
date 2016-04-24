@@ -14,7 +14,7 @@ const tabletojson = require('tabletojson');
 
 var controller = require('botkit').slackbot({ debug: false });
 var slackbot = controller.spawn({ token: getToken('slack') }).startRTM((err, bot, payload) =>  {
-    if (err) throw new Error('Error connecting to Slack: ', err)
+    if (err) throw new Error('Unable to connect to Slack: ' + err)
 });
 
 var witbot = require('../witbot')(getToken('wit'))
