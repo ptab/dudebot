@@ -4,7 +4,7 @@
   "description": "A Slack bot that finds tool (not cars)",
   "main": "dudebot.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node dudebot.js"
   },
   "author": "pedro@taborda.me",
   "license": "MIT",
