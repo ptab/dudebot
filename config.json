@@ -26,8 +26,8 @@
     },
 
     "confidence": {
-        "start": 0.9,
-        "reply": 0.7
+        "start": 0.95,
+        "reply": 0.8
     },
 
     "wrong_replies": {
