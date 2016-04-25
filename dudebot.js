@@ -96,35 +96,41 @@ function reply(message) {
         method: 'GET',
         host: config.confluence.api.host,
         port: config.confluence.api.port,
-        path: '/wiki/rest/api/content/' + config.confluence.content_id + '?expand=body.view',
-        auth: config.confluence.api.username + ':' + config.confluence.api.password
+        path: '/rest/api/content/' + config.confluence.content_id + '?expand=body.view',
+        auth: config.confluence.api.username + ':' + config.confluence.api.password,
+        rejectUnauthorized: false // ignore self-signed certificates ..
     };
 
     https.get(options, (res) => {
         res.setEncoding('utf8');
-        res.on('data', (d) => {
-            var table = tabletojson.convert(JSON.parse(d).body.view.value)[0];
+        var data = '';
+        res.on('data', (chunk) => {
+            data += chunk;
+        })
+        .on('end', () => {
+          var table = tabletojson.convert(JSON.parse(data).body.view.value)[0];
 
-            var url;
-            for (var i in table) {
-                var entry = table[i];
-                if (entry.Tool.toUpperCase() === tool.toUpperCase()) {
-                    url = entry[config.headers[environment]];
-                    break;
-                }
-            }
+          var url;
+          for (var i in table) {
+              var entry = table[i];
+              if (entry.Tool.toUpperCase() === tool.toUpperCase()) {
+                  url = entry[config.headers[environment]];
+                  break;
+              }
+          }
 
-            if (url) {
-                slackbot.reply(message, toUser(message, 'there you go: ' + url));
-            } else {
-                slackbot.reply(message, toUser(message, '¯\\_(ツ)_/¯'));
-                slackbot.reply(message, 'Try to find it here: ' + config.confluence.url);
-            }
+          if (url) {
+              slackbot.reply(message, toUser(message, 'there you go: ' + url));
+          } else {
+              slackbot.reply(message, toUser(message, '¯\\_(ツ)_/¯'));
+              slackbot.reply(message, 'Try to find it here: ' + config.confluence.url);
+          }
         });
     })
     .on('error', (e) => {
-        bot.reply(message, toUser(message, 'Confluence is mad at me :('));
-        bot.reply(message, 'See if it talks to you: ' + config.confluence.url);
+        console.log(e);
+        slackbot.reply(message, toUser(message, 'Confluence is mad at me :('));
+        slackbot.reply(message, 'See if it talks to you: ' + config.confluence.url);
     });
 }
 
