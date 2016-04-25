@@ -21,7 +21,19 @@ var witbot = require('../witbot')(getToken('wit'))
 
 var data = {};
 
-controller.on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, message) => {
+controller
+  .on(['direct_message', 'direct_mention', 'mention'], (bot, message) => {
+    witbot
+    .process(message.text)
+    .hears('help', config.confidence.reply, (outcome) => {
+      log(outcome);
+      bot.reply(message, toUser(message, 'hi! I think you want to ask me something. Try _"do you know the URL for Kibana in production?"_'));
+    })
+    .otherwise((outcome) => {
+      log(outcome);
+    });
+  })
+  .on(['direct_message', 'direct_mention', 'mention', 'ambient'], (bot, message) => {
     var confidenceToAsk = initialConfidence(message.event);
     var confidenceToReply = config.confidence.reply;
 
