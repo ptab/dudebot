@@ -58,7 +58,11 @@ controller
         if (parse(message, outcome, 'tool') && parse(message, outcome, 'environment')) {
           sendUrl(message);
         } else {
-          replyWithNoClue(message);
+          log(outcome);
+          console.log('Couldn\'t parse tool or environment');
+          console.log('tool', outcome.entities.tool);
+          console.log('environment', outcome.entities.environment);
+          // replyWithNoClue(message);
         }
       })
       .hears('ask_with_tool', confidenceToAsk, (outcome) => {
@@ -71,7 +75,9 @@ controller
             });
           });
         } else {
-          invalidReply(convo, message, 'tool');
+          log(outcome);
+          console.log('Couldn\'t parse tool:', outcome.entities.tool);
+          // replyWithNoClue(message);
         }
       })
       .hears('ask_with_none', confidenceToAsk, (outcome) => {
