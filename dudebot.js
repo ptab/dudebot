@@ -42,6 +42,30 @@ controller
     var confidenceToAsk = initialConfidence(message.event);
     var confidenceToReply = config.confidence.reply;
 
+    var askForTool = function (convo) {
+      convo.ask(toUser(message, 'which tool?'), (response, convo) => {
+        witbot
+          .process(response.text, { state: 'question_asked' })
+          .hears('reply_with_both', confidenceToReply, (outcome) => {
+            if (!parse(message, outcome, 'tool')) invalidReply(convo, message, 'tool');
+            else if (!parse(message, outcome, 'environment')) invalidReply(convo, message, 'environment');
+            else convo.next();
+          })
+          .hears('reply_with_tool', confidenceToReply, (outcome) => {
+            if (parse(message, outcome, 'tool')) {
+              askForEnvironment(convo);
+              convo.next();
+            } else {
+              invalidReply(convo, message, 'tool');
+            }
+          })
+          .otherwise((outcome) => {
+            log(outcome);
+            invalidReply(convo, message, 'tool');
+          });
+      });
+    }
+
     var askForEnvironment = function (convo) {
       convo.ask(toUser(message, 'on which environment?'), (response, convo) => {
         witbot
@@ -59,61 +83,31 @@ controller
 
     witbot
       .process(message.text)
-      .hears('ask_with_both', confidenceToAsk, (outcome) => {
-        if (parse(message, outcome, 'tool') && parse(message, outcome, 'environment')) {
+      .hears('ask_for_tool', confidenceToAsk, (outcome) => {
+        var hasTool = parse(message, outcome, 'tool');
+        var hasEnvironment = parse(message, outcome, 'environment');
+
+        if (hasTool && hasEnvironment) {
           sendUrl(message);
         } else {
           log(outcome);
-          console.log('Couldn\'t parse tool or environment');
           console.log('tool', outcome.entities.tool);
           console.log('environment', outcome.entities.environment);
-          // replyWithNoClue(message);
-        }
-      })
-      .hears('ask_with_tool', confidenceToAsk, (outcome) => {
-        if (parse(message, outcome, 'tool')) {
+
           slackbot.startConversation(message, (_, convo) => {
-            askForEnvironment(convo);
+            if (!hasTool) askForTool(convo);
+            else askForEnvironment(convo);
+
             convo.on('end', (convo) => {
               if (convo.status == 'completed') sendUrl(message);
               clear(message);
             });
           });
-        } else {
-          log(outcome);
-          console.log('Couldn\'t parse tool:', outcome.entities.tool);
-          // replyWithNoClue(message);
         }
       })
-      .hears('ask_with_none', confidenceToAsk, (outcome) => {
-        slackbot.startConversation(message, (_, convo) => {
-          convo.ask(toUser(message, 'which tool?'), (response, convo) => {
-            witbot
-              .process(response.text, { state: 'question_asked' })
-              .hears('reply_with_both', confidenceToReply, (outcome) => {
-                if (!parse(message, outcome, 'tool')) invalidReply(convo, message, 'tool');
-                else if (!parse(message, outcome, 'environment')) invalidReply(convo, message, 'environment');
-                else convo.next();
-              })
-              .hears('reply_with_tool', confidenceToReply, (outcome) => {
-                if (parse(message, outcome, 'tool')) {
-                  askForEnvironment(convo);
-                  convo.next();
-                } else {
-                  invalidReply(convo, message, 'tool');
-                }
-              })
-              .otherwise((outcome) => {
-                log(outcome);
-                invalidReply(convo, message, 'tool');
-              });
-          });
-
-          convo.on('end', (convo) => {
-            if (convo.status == 'completed') sendUrl(message);
-            clear(message);
-          });
-        });
+      .otherwise((outcome) => {
+        log(outcome);
+        invalidReply(convo, message, 'environment');
       });
   });
 
