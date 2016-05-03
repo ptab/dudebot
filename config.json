@@ -33,5 +33,7 @@
     "wrong_replies": {
         "tool": 3,
         "environment": 3
-    }
+    },
+
+    "connection_retries": 3
 }
