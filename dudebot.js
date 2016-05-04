@@ -107,7 +107,6 @@ controller
       })
       .otherwise((outcome) => {
         log(outcome);
-        invalidReply(convo, message, 'environment');
       });
   });
 
